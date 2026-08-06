@@ -10,10 +10,6 @@ from langchain_groq import ChatGroq
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
 
-# =========================================================
-# Environment setup
-# =========================================================
-
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
 
@@ -22,7 +18,6 @@ os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
 
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 
-# Support both environment-variable names.
 AVIATION_STACK_API_KEY = (
     os.getenv("AVIATION_STACK_API_KEY")
     or os.getenv("AVIATIONSTACK_API_KEY")
@@ -36,8 +31,6 @@ UVX_COMMAND = shutil.which("uvx") or "uvx"
 
 
 def _require_env(name: str, value: str | None) -> str:
-    """Return an environment value or raise a readable setup error."""
-
     if not value:
         raise RuntimeError(
             f"{name} is missing. "
@@ -61,19 +54,10 @@ def _subprocess_env(**updates: str | None) -> dict[str, str]:
     return env
 
 
-# =========================================================
-# LLM
-# =========================================================
-
 llm = ChatGroq(
     model="llama-3.3-70b-versatile",
     api_key=_require_env("GROQ_API_KEY", GROQ_API_KEY),
 )
-
-
-# =========================================================
-# MCP client
-# =========================================================
 
 client = MultiServerMCPClient(
     {
@@ -188,9 +172,6 @@ async def _get_server_tool(
     return tool
 
 
-# =========================================================
-# MCP connection test
-# =========================================================
 
 async def get_all_tools() -> None:
     """
@@ -228,9 +209,6 @@ async def get_all_tools() -> None:
             )
 
 
-# =========================================================
-# Tavily MCP
-# =========================================================
 
 async def tavily_mcp_search(query: str):
     search_tool = await _get_server_tool(
@@ -245,9 +223,6 @@ async def tavily_mcp_search(query: str):
     )
 
 
-# =========================================================
-# AviationStack MCP
-# =========================================================
 
 async def aviation_mcp_call(
     tool_name: str,
@@ -262,10 +237,6 @@ async def aviation_mcp_call(
         tool_args or {}
     )
 
-
-# =========================================================
-# Weather MCP
-# =========================================================
 
 async def weather_mcp_search(city: str):
     weather_tool = await _get_server_tool(
@@ -293,9 +264,6 @@ async def forecast_mcp_search(city: str):
     )
 
 
-# =========================================================
-# Destination extractor
-# =========================================================
 
 def extract_destination(query: str) -> str:
     prompt = f"""
