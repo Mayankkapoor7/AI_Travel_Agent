@@ -93,9 +93,7 @@ class TravelState(TypedDict, total=False):
     llm_calls: int
 
 
-# =========================
 # Shared helpers
-# =========================
 KNOWN_AGENTS = {
     "flight_agent",
     "hotel_agent",
@@ -144,10 +142,7 @@ def _empty_constraints() -> dict[str, Any]:
         "special_preferences": [],
     }
 
-
-# =========================
 # Supervisor Agent + Input Guardrail
-# =========================
 def supervisor_agent(state: TravelState):
     query = state["user_query"]
     llm_calls = state.get("llm_calls", 0)
@@ -278,9 +273,8 @@ User request:
     }
 
 
-# =========================
+
 # Guardrail blocked response
-# =========================
 def guardrail_blocked_agent(state: TravelState):
     reason = state.get("final_response") or state.get("guardrail_reason") or (
         "This request was blocked by the travel input guardrail."
@@ -353,9 +347,7 @@ def flight_agent(state: TravelState):
     }
 
 
-# =========================
-# Hotel Agent - original behavior kept
-# =========================
+# Hotel Node
 def hotel_agent(state: TravelState):
     query = (
         f"Best hotels for "
@@ -394,9 +386,8 @@ def hotel_agent(state: TravelState):
     }
 
 
-# =========================
-# Weather Agent - original behavior kept
-# =========================
+
+# Weather Node
 def weather_agent(state: TravelState):
     city = extract_destination(
         state["user_query"]
@@ -442,10 +433,7 @@ Forecast:
         ],
     }
 
-
-# =========================
-# Budget Agent - new specialist
-# =========================
+# Budget Node
 def budget_agent(state: TravelState):
     prompt = f"""
 Analyze whether this trip is realistic for the user's budget.
