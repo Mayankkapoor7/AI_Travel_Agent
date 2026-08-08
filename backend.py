@@ -204,3 +204,89 @@ User request:
             "messages": [AIMessage(content=f"Guardrail blocked request: {reason}")],
             "llm_calls": llm_calls,
         }
+
+    supervisor_prompt = f"""
+You are the supervisor of a multi-agent travel-planning system.
+Choose only the specialist agents needed for the request.
+
+Available agents:
+- flight_agent: flights, airports, airlines, routes, airfare, or booking advice
+- hotel_agent: hotels, accommodation, neighborhoods, or places to stay
+- weather_agent: weather, climate, season, forecast, or packing advice
+- budget_agent: cost, affordability, price limits, or budget feasibility
+- itinerary_agent: creates the integrated travel plan and must always be included
+
+Return strict JSON only using this schema:
+{{
+  "selected_agents": ["flight_agent", "hotel_agent", "weather_agent", "budget_agent", "itinerary_agent"],
+  "trip_constraints": {{
+    "destination": "",
+    "origin": "",
+    "duration": "",
+    "budget": "",
+    "travel_style": "",
+    "special_preferences": []
+  }},
+  "reasoning": ""
+}}
+
+User request:
+{query}
+"""
+
+    try:
+        supervisor_raw = _llm_text(
+            "You route work to travel specialist agents. Return strict JSON only.",
+            supervisor_prompt,
+        )
+        parsed = _json_from_llm(supervisor_raw)
+        requested_agents = parsed.get("selected_agents", [])
+        selected_agents = [
+            name for name in AGENT_ORDER
+            if name in requested_agents and name in KNOWN_AGENTS
+        ]
+
+        # The itinerary agent integrates whichever specialist results were selected.
+        if "itinerary_agent" not in selected_agents:
+            selected_agents.append("itinerary_agent")
+
+        constraints = _empty_constraints()
+        parsed_constraints = parsed.get("trip_constraints", {})
+        if isinstance(parsed_constraints, dict):
+            constraints.update(parsed_constraints)
+
+        reasoning = str(parsed.get("reasoning", "")).strip()
+        llm_calls += 1
+    except Exception as exc:
+        print(f"Supervisor fallback used: {exc}")
+        # Original workflow behavior is preserved as the fallback.
+        selected_agents = AGENT_ORDER.copy()
+        constraints = _empty_constraints()
+        reasoning = (
+            "Supervisor parsing failed, so the original full travel workflow "
+            "was selected as a safe fallback."
+        )
+
+    return {
+        "guardrail_allowed": True,
+        "guardrail_reason": guardrail_reason,
+        "selected_agents": selected_agents,
+        "trip_constraints": constraints,
+        "supervisor_reasoning": reasoning,
+        "messages": [AIMessage(content="Supervisor created the agent plan.")],
+        "llm_calls": llm_calls,
+    }
+
+
+# =========================
+# Guardrail blocked response
+# =========================
+def guardrail_blocked_agent(state: TravelState):
+    reason = state.get("final_response") or state.get("guardrail_reason") or (
+        "This request was blocked by the travel input guardrail."
+    )
+    return {
+        "final_response": reason,
+        "messages": [AIMessage(content=reason)],
+    }
+
