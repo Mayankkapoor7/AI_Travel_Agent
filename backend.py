@@ -93,3 +93,114 @@ class TravelState(TypedDict, total=False):
     llm_calls: int
 
 
+# =========================
+# Shared helpers
+# =========================
+KNOWN_AGENTS = {
+    "flight_agent",
+    "hotel_agent",
+    "weather_agent",
+    "budget_agent",
+    "itinerary_agent",
+}
+
+AGENT_ORDER = [
+    "flight_agent",
+    "hotel_agent",
+    "weather_agent",
+    "budget_agent",
+    "itinerary_agent",
+]
+
+
+def _llm_text(system_prompt: str, user_prompt: str) -> str:
+    response = llm.invoke(
+        [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_prompt),
+        ]
+    )
+    return str(response.content)
+
+
+def _json_from_llm(text: str) -> dict[str, Any]:
+    """Extract the first complete JSON object returned by the model."""
+    start = text.find("{")
+    end = text.rfind("}")
+
+    if start == -1 or end == -1 or end < start:
+        raise ValueError("The model did not return a JSON object.")
+
+    return json.loads(text[start : end + 1])
+
+
+def _empty_constraints() -> dict[str, Any]: # Trip constraints
+    return {
+        "destination": "",
+        "origin": "",
+        "duration": "",
+        "budget": "",
+        "travel_style": "",
+        "special_preferences": [],
+    }
+
+
+# =========================
+# Supervisor Agent + Input Guardrail
+# =========================
+def supervisor_agent(state: TravelState):
+    query = state["user_query"]
+    llm_calls = state.get("llm_calls", 0)
+
+    guardrail_prompt = f"""
+Determine whether the following request belongs to travel planning or travel
+information. Valid requests can include destinations, flights, hotels, weather,
+budgets, visas, transportation, sightseeing, food, packing, or itineraries.
+
+Block clearly unrelated requests and requests asking for harmful or illegal
+instructions. Do not block a valid travel request merely because some details
+are missing.
+
+Return strict JSON only:
+{{
+  "allowed": true,
+  "reason": ""
+}}
+
+User request:
+{query}
+"""
+
+    # Fail open on parser/model errors so a temporary JSON-format issue does not
+    # break the original travel-planning behavior.
+    try:
+        guardrail_raw = _llm_text(
+            "You are the input guardrail for a travel-planning application. "
+            "Return strict JSON only.",
+            guardrail_prompt,
+        )
+        guardrail_result = _json_from_llm(guardrail_raw)
+        allowed = bool(guardrail_result.get("allowed", True))
+        guardrail_reason = str(guardrail_result.get("reason", "")).strip()
+        llm_calls += 1
+    except Exception as exc:
+        print(f"Guardrail fallback used: {exc}")
+        allowed = True
+        guardrail_reason = "Guardrail validation fallback allowed the request."
+
+    if not allowed:
+        reason = guardrail_reason or (
+            "TripMate AI can only help with travel-planning requests. "
+            "Please ask about a destination, flight, hotel, weather, budget, "
+            "or itinerary."
+        )
+        return {
+            "guardrail_allowed": False,
+            "guardrail_reason": reason,
+            "selected_agents": [],
+            "trip_constraints": _empty_constraints(),
+            "supervisor_reasoning": reason,
+            "final_response": reason,
+            "messages": [AIMessage(content=f"Guardrail blocked request: {reason}")],
+            "llm_calls": llm_calls,
+        }
