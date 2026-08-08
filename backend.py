@@ -74,7 +74,7 @@ class TravelState(TypedDict, total=False):
     guardrail_allowed: bool
     guardrail_reason: str
     selected_agents: list[str]
-    trip_constraints: dict[str, Any] # budget, location etc
+    trip_constraints: dict[str, Any]
     supervisor_reasoning: str
 
     # Original specialist results
@@ -83,9 +83,9 @@ class TravelState(TypedDict, total=False):
     weather_results: str
     itinerary: str
 
-    # New budget Agent+ HITL state
+    # New budget + HITL state
     budget_results: str
-    approval_request: str # HITL, What the request is
+    approval_request: str
     approved: bool
     human_feedback: str
     final_response: str
@@ -134,7 +134,7 @@ def _json_from_llm(text: str) -> dict[str, Any]:
     return json.loads(text[start : end + 1])
 
 
-def _empty_constraints() -> dict[str, Any]: # Trip constraints
+def _empty_constraints() -> dict[str, Any]:
     return {
         "destination": "",
         "origin": "",
@@ -350,5 +350,46 @@ def flight_agent(state: TravelState):
         "flight_results": flight_data,
         "messages": [AIMessage(content="Flight recommendations generated")],
         "llm_calls": state.get("llm_calls", 0) + 1,
+    }
+
+
+# =========================
+# Hotel Agent - original behavior kept
+# =========================
+def hotel_agent(state: TravelState):
+    query = (
+        f"Best hotels for "
+        f"{state['user_query']}"
+    )
+
+    try:
+        hotel_results = asyncio.run(
+            tavily_mcp_search(query)
+        )
+
+    except Exception as exc:
+        print(
+            f"HOTEL AGENT MCP ERROR: "
+            f"{type(exc).__name__}: {exc}",
+            flush=True,
+        )
+
+        hotel_results = (
+            "Live hotel search is temporarily unavailable. "
+            "Provide general accommodation and neighborhood "
+            "guidance based on the destination and clearly "
+            "label it as non-live advice."
+        )
+
+    return {
+        "hotel_results": hotel_results,
+        "messages": [
+            AIMessage(
+                content="Hotel information processed."
+            )
+        ],
+        "llm_calls": (
+            state.get("llm_calls", 0) + 1
+        ),
     }
 
