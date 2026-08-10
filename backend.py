@@ -475,11 +475,8 @@ If exact live prices are unavailable, clearly label estimates as approximate.
         "llm_calls": state.get("llm_calls", 0) + 1,
     }
 
-
-# =========================
-# Itinerary Agent - original behavior extended with selected results
-# =========================
-def itinerary_agent(state: TravelState):
+# Itinerary Node - original behavior extended with selected results
+def itinerary_node(state: TravelState):
     prompt = f"""
 Create a complete travel itinerary.
 
@@ -525,10 +522,8 @@ Create a clear draft that is ready for human review.
     }
 
 
-# =========================
 # Human-in-the-Loop approval
-# =========================
-def human_approval_agent(state: TravelState):
+def human_approval_node(state: TravelState):
     # Do not wrap interrupt() in try/except. LangGraph uses it to pause execution.
     review = interrupt(
         {
@@ -552,4 +547,3 @@ def human_approval_agent(state: TravelState):
         "human_feedback": human_feedback,
         "messages": [AIMessage(content="Human approval step completed.")],
     }
-
